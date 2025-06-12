@@ -1,0 +1,18 @@
+{
+  "name": "unit-testing-demo-gemini",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "mocha"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chai": "^5.2.0",
+    "mocha": "^11.6.0",
+    "sinon": "^20.0.0"
+  }
+}
