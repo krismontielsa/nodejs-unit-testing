@@ -59,8 +59,8 @@ Mocha uses `describe()` to group tests and `it()` for individual test cases.
 
 ```javascript
 // test/user.test.js
-import sinon from 'sinon';
-import { getUser, database } from '../user.js';
+const sinon = require('sinon');
+const { getUser, database } = require('../user.js');
 
 // Mocha uses describe() to group tests and it() for individual test cases.
 describe("getUser function", () => {
@@ -88,9 +88,10 @@ Let's combine Sinon, and Chai to complete our test. We will "stub" the `database
 
 Update `test/user.test.js`
 ```javascript
-import sinon from 'sinon';
-import { expect } from 'chai';
-import { getUser, database } from '../user.js';
+const sinon = require('sinon');
+const chai = require('chai');
+const { expect } = chai;
+const { getUser, database } = require('../user');
 
 describe('getUser function', () => {
     it('should return a user object when the database call is successful', () => {
@@ -139,3 +140,163 @@ describe('getUser function', () => {
 4. `userStub.restore()`: This is very important. It removes our stub and restores the original `database.getUser` function. This ensures our tests don't intefere with each other.
 
 Now, when you run `npm test`, you'll see Mocha's output showing that both of your tests have passed! You have successfully unit-tested a function by isolating it from its dependencied.
+
+## Can We 'Stub' The 'database' if It's Private or Not Exported?
+
+The short answer is no: **No, if** `database` **object is truly privare and not exported, you cannot stub it directly using the standard** `sinon.stub(object, 'method')` approach.
+
+Let's break down why and then explore the common solutions to this problem.
+
+Javascript modules in Node.js have their own **scope**. Any variable or function you declare inside a file is private to that file unless you explicitly attach it to `module.exports`. 
+
+Think of your `user.js` file as a sealed box.
+
+```javascript
+// user.js -> The "Sealed Box"
+
+// This 'database' object is INSIDE the box
+// No one outside can see or touch it.
+
+const database = {
+  getUser: (id) => {
+      /*... does database stuff ... */
+  }
+}
+
+const getUser = (id) => {
+  try {
+    const user = database.getUser(id);
+    return user;
+  } catch (error) {
+    return null
+  }
+}
+
+module.exports = { getUser };
+```
+
+Your test file, `user.test.js`, is outside this box. When it `from '..user.js'`, it only receives the getUser function. It has no reference to, and no knowledge of, the internal `database` constant.
+
+Sinon's `stub(object, 'method')` needs a direct reference to the object it's supposed to modify. Since your test can't access the original `database` object, it can't hand it over to Sinon to be `stubbed`.
+
+### How to Solve This: The Professional Patterns
+This is a very common scenario, and it's usually a sign that the code could be more "testable." Here are the two primary ways to handl it.
+
+#### Solution 1: Dependency injection (The Preferred Method)
+
+This is the cleanest and most recommended approach. Instead of a module creating its own dependencies, you "inject" them (pass them in as arguments). This decouples your code and makes it incredibly easy to test.
+
+**1. Refactor Your Code**
+Modidy `user.js` to accept the database as a parameter.
+
+```javascript
+// user.js (Refactored for Dependency Injection)
+
+// Now our function is pure. It depends only on its inputs.
+const createUserActions = (database) => {
+    return {
+        getUser: (id) => {
+            try {
+                const user = database.getUser(id);
+                return user;
+            } catch (error) {
+                return null;
+            }
+        },
+        // you could add other user actions here, like deleteUser, etc.
+    };
+};
+
+module.exports = createUserActions;
+```
+
+**2. Update Your Test**
+
+Your test is now much simpler. You can create a completely fake database object ad pass it in. No Sinon needed for this part!
+
+```javascript
+// test/user.test.js
+const chai = require('chai');
+const { expect } = chai;
+const createUserActions = require('../user.js');
+
+describe('getUser with Dependency Injection', () => {
+    it('should return a user when the database provides one', () => {
+        //1. Create a fake database (a simple object literal works
+        const fakeDatabase = {
+            getUser: (id) => {
+                // We control exactly what this fake method does
+                expect(id).to.equal(1);
+                return { id: 1, name: 'Injected User' };
+            }
+        } 
+
+        // 2. Inject the fake depency fake dependecy
+        const userActions = createUserActions(fakeDatabase);
+
+        // 3. Call the function and assert
+        const user = userActions.getUser(1);
+        expect(user.name).to.equal('Injected User');
+    });
+});
+```
+
+#### Solution 2: Use a Library like `proxyrequire` (The "Magic" Method)
+
+Sometimes you can't or don't want to refactor the existing code. In these cases, you can use a library like `proxyrequire`. 
+
+`proxyquire` loads your module but allows you to replace its 'require' calls with your own fakes before the module code runs. `proxyquire` is built for CommonJS module system, which uses function `require()` to load modules.
+
+**1. Keep Your Original Code**
+Let's assume `user.js` is back to its original, non-injectable form where `database` is reuired internally.
+
+```javascript
+// user.js (Original form)
+const database = require('./database');
+
+const getUser = (id) => {
+    const user = database.getUser(id);
+    return user;
+}
+
+module.exports = { getUser };
+```
+
+**2. Use `proxyquire` in Your Test**
+
+First, `npm install proxyquire`
+
+Now, use it to load your module, replacing the `database` dependency with a Sinon stub.
+
+```javascript
+// test/user.test.js
+const chai = require('chai');
+const { expect } = chai;
+const sinon = require('sinon');
+const proxyquire = require('proxyquire');
+
+describe('getUser with proxyquire', () => {
+    it('should return a user by stubbing the internal dependency', () => {
+        // 1. Create a Sinon stub for the database's method
+        const userStub = sinon.stub().returns({ id: 5, name: "Proxied User"});
+
+        // 2. Load the module using proxyquire
+        const { getUser } = proxyquire('../user.js', {
+            // Tell proxyquire: "when user.js tries to require('./database')"
+            './database' : {
+                // ...give it this object instead
+                getUser: userStub,
+            },
+        });
+
+        // 3. Call the function
+        const user = getUser(5);
+
+        // 4. Assert that our stub was used and the result is correct
+        expect(userStub.calledOnceWith(5)).to.be.true;
+        expect(user.name).to.equal('Proxied User');
+    })
+})
+```
+
+For new code, **always prefer Dependency Injection**. It leads to a healthier and more maintainable codebase. For existing, hard-to-change code, `proxyquire` is an excellent tool to have in your back pocket.
