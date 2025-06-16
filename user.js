@@ -66,11 +66,62 @@
 
 /* ----------------------------------------------------------------------------- */
 
-// user.js (Original form)
-const database = require('./database');
+// // user.js (Original form)
+// const database = require('./database');
+// const getUser = (id) => {
+//     const user = database.getUser(id);
+//     return user;
+// }
+
+// module.exports = { getUser };
+
+/* ----------------------------------------------------------------------------- */
+
+// user.js
+
+// This 'database' object is a private variable, defined right here n the file.
+// It is NOT being imported from another file
+
+// const database = {
+//     getUser: (id) => {
+//         // In a real app, this would query a database
+//         throw new Error('This should not be called in a test!')
+//     },
+// };
+
+// const getUser = (id) => {
+//     try {
+//         const user = database.getUser(id);
+//         return user;
+//     } catch (error) {
+//         return null;
+//     }
+// }
+
+// module.exports = { getUser };
+
+/* -------------------------------------------------------------------------------- */
+
+// user.js
+
+// This 'database' object is a private variable, defined right here in the file.
+// It is NOT being imported from another file.
+const database = {
+    getUser: (id) => {
+        // In a real app, this would query a database
+        throw new Error('This should not be called in a test!');
+    },
+};
+
 const getUser = (id) => {
+  try {
     const user = database.getUser(id);
+    console.log(user);
+    
     return user;
-}
+  } catch (error) {
+    return null;
+  }
+};
 
 module.exports = { getUser };

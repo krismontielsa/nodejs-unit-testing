@@ -180,7 +180,7 @@ Your test file, `user.test.js`, is outside this box. When it `from '..user.js'`,
 Sinon's `stub(object, 'method')` needs a direct reference to the object it's supposed to modify. Since your test can't access the original `database` object, it can't hand it over to Sinon to be `stubbed`.
 
 ### How to Solve This: The Professional Patterns
-This is a very common scenario, and it's usually a sign that the code could be more "testable." Here are the two primary ways to handl it.
+This is a very common scenario, and it's usually a sign that the code could be more "testable." Here are the two primary ways to handle it.
 
 #### Solution 1: Dependency injection (The Preferred Method)
 
@@ -298,5 +298,53 @@ describe('getUser with proxyquire', () => {
     })
 })
 ```
+#### Solution 3: Use a Library like `rewire' 
+Let's say if the 'database' object is a private varibale, 
+
+```javascript
+// user.js
+
+// This 'database' object is a private variable, defined right here in the file.
+// It is NOT being imported from another file.
+const database = {
+    getUser: (id) => {
+        // In a real app, this would query a database
+        throw new Error('This should not be called in a test!');
+    },
+};
+
+const getUser = (id) => {
+  try {
+    const user = database.getUser(id);
+    return user;
+  } catch (error) {
+    return null;
+  }
+};
+
+module.exports = { getUser };
+```
+
+For this specific structure, `proxyquire` will not work.
+
+The reason is that `proxyquire` is designed to hijack and replace `require()` calls. Its entire purpose is to intercept statements like `const someLibrary = require('some-library');` and provide a fake version of `'some-library`;
+
+In the code above, the `database` object is not loaded via 'require()'. It's a simple constant defined right inside the same file. `proxyquire` has no `require()` statement to intercept, so it can't help here.
+
+The right tool for this job: `rewire`
+When you need to modify a private, module-scoped variable that defined within the file itself, you need a different tool called `rewire`.
+
+`rewire` is a bit like a surgical tool. It loads your module and gives you special methods (`__set__ ` and `__get__`) to modify its private internal variables for testing.
+
+Here's how you would test your exact code snipper using `rewire`.
+
+Step 1: Install `rewire`
+```bash
+npm install rewire
+```
+
+**Step 2: Write the Test with `rewire`**
+
+The test will look very similar, but instead of using `proxyquire`, we will use `rewire` to "reach into" `user.js` and replace the `database` constant.
 
 For new code, **always prefer Dependency Injection**. It leads to a healthier and more maintainable codebase. For existing, hard-to-change code, `proxyquire` is an excellent tool to have in your back pocket.
